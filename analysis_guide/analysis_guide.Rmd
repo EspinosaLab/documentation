@@ -11,8 +11,8 @@ output:
 editor_options: 
   chunk_output_type: inline
 params:
-  version: 0.1 # Do not edit except for new version
-  title: Standard project analysis setup # Do not edit except for new version
+  version: 0.2
+  title: Standard project analysis setup
   project: Setting up a project for computation on Rosalind 
   date: !r format(Sys.time(), '%d %B %Y')
   author:
@@ -23,7 +23,7 @@ params:
 ---
 
 ***
-## Project: `r params$project` 
+<font style="font-size:18pt"> Project: `r params$project` </font><br>
 Date:  `r params$date`  
 Report version: `r params$version`   
 Author(s): `r params$author`  
@@ -34,11 +34,15 @@ Author(s): `r params$author`
 knitr::opts_chunk$set(class.source='fold-show')
 ```
 
+# Get the data
+
+Get the data from the sequencing provider. This is commonly Novogene or the Genomics core here on campus. We'll want to have this data archived, so download it first in to a future proof location, such as the Proton server.
+
 # Create the project
 
 ## Build some directories
 
-You'll have to manually create a few directories to get started as scripts used later depend on a specific directory structure. Create the following hierarchy.
+You'll have to manually create a few directories to get started as scripts used later depend on a specific directory structure. Create the following hierarchy. Be sure to vreate it in the correct data-type foler, e.g. RNASeq, PROSeq, etc.
 
 ```{class.source=NULL}
 ├── informative_proj_name
@@ -55,27 +59,7 @@ We'll use this hypoxia project as a model for the rest of the guide guide:
 │   │   └── scripts
 │   ├── raw_05_06_2019
 ```
-
-
-## MD5 sums check
-
-<p style="color:blue">**SECTION INCOMPLETE**</p>
-
-## Create sample_locations.txt
-
-<p style="color:blue">**SECTION INCOMPLETE**</p>
-
-Now that the file is created, this is the structure of the project folder.
-
-```{class.source=NULL}
-├── HCT116_Hypoxia_spikein
-│   ├── analysis_05_06_2019
-│   │   ├── sample_locations.txt
-│   │   └── scripts
-│   ├── raw_05_06_2019
-```
-
-# Transferring data to/from Rosalind
+# Transferring data from archive to Rosalind
 
 To be HIPAA compliant, Rosalind is not directly accessible by end users. A jumphost is used before accessing Rosalind for computation, and a transfer server is used when moving data on and off of Rosalind. The transfer server is very limited in its capabilities. The only way to transfer files to the transfer server, and further to Rosalind is through secure file transfer protocol (sftp). You can use the command line directly, or can use a GUI based app like Filezilla. If using a GUI based client, be sure to include the sftp prefix before the server, e.g. `sftp://cubipmsftp.ucdenver.pvt`. Once the files are on the transfer server, login to Rosalind and transfer from the transfer server to Rosalind.
 
@@ -126,13 +110,13 @@ sftp> get -r remote_directory
 To upload files on to the server from the local machine, use the `put` command. Files will be uploaded in to the present working directory from the folder from which you launched the sftp session.
 
 ```{class.source=NULL}
-sftp> get filename.tar.gz
+sftp> put filename.tar.gz
 ```
 
 To download an entire folder, use the `-r` recursive flag.
 
 ```{class.source=NULL}
-sftp> get -r remote_directory
+sftp> put -r remote_directory
 ```
 
 ### On to Rosalind
@@ -154,7 +138,6 @@ This should be the resulting directory structure.
 ```{class.source=NULL}
 ├── HCT116_Hypoxia_spikein
 │   ├── analysis_05_06_2019
-│   │   ├── sample_locations.txt
 │   │   └── scripts
 │   ├── raw_05_06_2019
 │   │   ├── H202SC19030981
@@ -162,11 +145,64 @@ This should be the resulting directory structure.
 ```
 
 
+# Create the sample info spreadsheet
+
+## Sequence metadata
+
+Much of this step is manual. You'll want to reach out to whomever sent the samples for sequencing to get this information. The goal is the link the sample name with the fastq file and to ensure the the MD5 checksums of the data from the provider match the data that we've downloaded. An important step here is to determine what the final sample name will be, the name that will be used in plots in downstream analysis. It's probably a good idea to chat with the person that generated the data to figure out what would be most intutitive/informative for them. There is a template Excel spreadsheet that you can fill in. Here is an example of what the metadata may look like:
+
+<div class="pagedtable pagedtable-not-empty" style="opacity: 1;"><table style="visibility: hidden; position: absolute; white-space: nowrap; height: auto; width: auto;">
+```{r message=FALSE, warning=FALSE}
+excelTable(sample_info, defaultColWidth=200, editable=FALSE, autoColTypes=FALSE)
+```
+</table></div>
+
+## MD5 checksums
+
+Some sequencing providers will send checksums with the data so that we can ensure there was no corruption resulting from the transfer process. Perform this check after downloading the files to the archive and after transfering from the archive to Rosalind. Store the results in the spreadsheet. To create the MD5 checksums for the fastq files post-transfer, use the following command:
+
+```{class.source=NULL}
+$ for file in $(find /path/to/raw/data/*.fq.gz); do md5sum $file; done > MD5_post.txt
+```
+
+You can compare the MD5 checksums within the pre- and post-transfer MD5 files with the following awk command. As with most linux tools, no news is good news. If there is a mismatch it will be reported.
+
+```{class.source=NULL}
+$ awk -F"/" 'FNR==NR{filearray[$1]=$NF; next }!($1 in filearray){printf "%s has a different md5sum\n",$NF}' MD5_post.txt MD5_pre.txt
+```
+
+Keep track of the results.
+
+<div class="pagedtable pagedtable-not-empty" style="opacity: 1;"><table style="visibility: hidden; position: absolute; white-space: nowrap; height: auto; width: auto;">
+```{r message=FALSE, warning=FALSE}
+excelTable(md5_sums, defaultColWidth=200, editable=FALSE, autoColTypes=FALSE)
+```
+</table></div>
+
+## Build the sample_locations.txt
+
+The `sample_locations.txt` file will be used in most downstream steps. Down't mess this up! Here is where we'll link the sample names to the fastq files. You can construct this any way you like. It may be helpful to use the filepath listed in the MD5.txt file generate above. Here is an example of what the sample_locations.txt may contain. It's really a tabular file with spaces a delimeters, but the pipeline will look for `sample_locations.txt` so keep this name. Be sure that there are NO cilumn labels.
+
+<div class="pagedtable pagedtable-not-empty" style="opacity: 1;"><table style="visibility: hidden; position: absolute; white-space: nowrap; height: auto; width: auto;">
+```{r message=FALSE, warning=FALSE}
+excelTable(sample_locations, defaultColWidth=200, editable=FALSE, autoColTypes=FALSE)
+```
+</table></div>
+
+The structure should now look like this:
+
+```{class.source=NULL}
+├── HCT116_Hypoxia_spikein
+│   ├── analysis_05_06_2019
+│   │   ├── sample_locations.txt
+│   │   └── scripts
+│   ├── raw_05_06_2019
+```
 
 
 # Run the analysis setup script
 
-Now that the sample_location.txt file is in place we can run the analysis setup script. Be sure to run this script from the `analysis_mm_dd_yyyy` directory. This script won't run if the necessary arguments aren't provided. 
+Now that the sample_location.txt file is in place we can run the analysis setup script. Be sure to run this script from the `analysis_mm_dd_yyyy` directory. This script won't run if the necessary arguments aren't provided. It will set-up the analysis based on the pipeline script to be run, in this case the RNASeq pipeline.
 
 Here is the current analysis setup script at the time of writing, **`analysis_setup_v0.7.sh`**:
 ```{bash}
@@ -2009,7 +2045,7 @@ $ watching -u username
 
 # Check the logs
 
-Check the run logs to ensure everything ran to completion without error. There will be a log file in the scripts folder which will give information as to which stage the script failed on. If there are issues, determine at which stage the error occurred and check `std_err_out` folder within the per-sample output folders. Her you'll find more detailed tool-specific output.
+Check the run logs to ensure everything ran to completion without error. There will be a log file in the scripts folder which will give information as to which stage the script failed on. If there are issues, determine at which stage the error occurred and check `std_err_out` folder within the per-sample output folders. Here you'll find more detailed tool-specific output.
 
 # Final directory structure
 
@@ -2020,6 +2056,11 @@ At the end, you should have some similar to the following structure.
 │   ├── analysis_05_06_2019
 │   │   ├── QC
 │   │   ├── Sample_HCT116_HIF1Ako_Hypox_2
+│   │   │   ├── Alignments
+│   │   │   ├── Counts
+│   │   │   ├── Processed
+│   │   │   ├── Raw
+│   │   │   └── std_out_err
 │   │   ├── Sample_HCT116_HIF1Ako_Hypox_3
 │   │   ├── Sample_HCT116_HIF1Ako_Norm_2
 │   │   ├── Sample_HCT116_HIF1Ako_Norm_3
