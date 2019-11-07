@@ -11,7 +11,7 @@ output:
 editor_options: 
   chunk_output_type: inline
 params:
-  version: 0.2
+  version: 0.3
   title: Standard project analysis setup
   project: Setting up a project for computation on Rosalind 
   date: !r format(Sys.time(), '%d %B %Y')
@@ -62,6 +62,8 @@ We'll use this hypoxia project as a model for the rest of the guide guide:
 # Transferring data from archive to Rosalind
 
 To be HIPAA compliant, Rosalind is not directly accessible by end users. A jumphost is used before accessing Rosalind for computation, and a transfer server is used when moving data on and off of Rosalind. The transfer server is very limited in its capabilities. The only way to transfer files to the transfer server, and further to Rosalind is through secure file transfer protocol (sftp). You can use the command line directly, or can use a GUI based app like Filezilla. If using a GUI based client, be sure to include the sftp prefix before the server, e.g. `sftp://cubipmsftp.ucdenver.pvt`. Once the files are on the transfer server, login to Rosalind and transfer from the transfer server to Rosalind.
+
+The transfer is not for long-term storage of data, it may be deleted at any time. There is a storage limit per user. Remove the data once it's on Rosalind!
 
 ## Command line
 
@@ -121,7 +123,7 @@ sftp> put -r remote_directory
 
 ### On to Rosalind
 
-Rosalind has contact with the transfer server. Once the data is uploaded to the transfer server you are one step away from accessing it on Rosalind. Once logged in to Rosalind, you can access the file on the transfer server freely. The environmental variable $TRANSFER is a shortcut for accessing the transfer server. Each user has a folder named as their username on the transfer server. Simply use `cp` or `rsync` to transfer the desired files in to your directory on Rosalind.
+Rosalind has contact with the transfer server. Once the data is uploaded to the transfer server you are one step away from accessing it on Rosalind. Once logged in to Rosalind, you can access the file on the transfer server freely. The environmental variable $TRANSFER is a shortcut for accessing the transfer server. Each user has a folder named as their username on the transfer server. Simply use `cp`, `mv`, or `rsync` to transfer the desired files in to your directory on Rosalind. Remember to remove your data from the transfer server.
 
 ```{class.source=NULL}
 $ rsync -arzuh $TRANSFER/samples $SHARED/Projects2/RNAseq/HCT116_Hypoxia_spikein/raw_05_06_2019
@@ -165,13 +167,7 @@ Some sequencing providers will send checksums with the data so that we can ensur
 $ for file in $(find /path/to/raw/data/*.fq.gz); do md5sum $file; done > MD5_post.txt
 ```
 
-You can compare the MD5 checksums within the pre- and post-transfer MD5 files with the following awk command. As with most linux tools, no news is good news. If there is a mismatch it will be reported.
-
-```{class.source=NULL}
-$ awk -F"/" 'FNR==NR{filearray[$1]=$NF; next }!($1 in filearray){printf "%s has a different md5sum\n",$NF}' MD5_post.txt MD5_pre.txt
-```
-
-Keep track of the results.
+Keep track of the results in the spreadsheet. You can also check whether they match or not here.
 
 <div class="pagedtable pagedtable-not-empty" style="opacity: 1;"><table style="visibility: hidden; position: absolute; white-space: nowrap; height: auto; width: auto;">
 ```{r message=FALSE, warning=FALSE}
@@ -179,12 +175,19 @@ excelTable(md5_sums, defaultColWidth=200, editable=FALSE, autoColTypes=FALSE)
 ```
 </table></div>
 
+You can also compare the MD5 checksums within the pre- and post-transfer MD5 files with the following awk command. As with most linux tools, no news is good news. If there is a mismatch it will be reported.
+
+```{class.source=NULL}
+$ awk -F"/" 'FNR==NR{filearray[$1]=$NF; next }!($1 in filearray){printf "%s has a different md5sum\n",$NF}' MD5_post.txt MD5_pre.txt
+```
+
 ## Build the sample_locations.txt
 
-The `sample_locations.txt` file will be used in most downstream steps. Down't mess this up! Here is where we'll link the sample names to the fastq files. You can construct this any way you like. It may be helpful to use the filepath listed in the MD5.txt file generate above. Here is an example of what the sample_locations.txt may contain. It's really a tabular file with spaces a delimeters, but the pipeline will look for `sample_locations.txt` so keep this name. Be sure that there are NO cilumn labels.
+The `sample_locations.txt` file will be used in most downstream steps. Don't mess this up! Here is where we'll link the sample names to the fastq files. You can construct this any way you like. It may be helpful to use the filepath listed in the MD5.txt file generate above. Here is an example of what the sample_locations.txt may contain. It's really a delimited file with tabs as delimeters, but the pipeline will look for `sample_locations.txt` so keep this name. Be sure that there are NO column labels.
 
 <div class="pagedtable pagedtable-not-empty" style="opacity: 1;"><table style="visibility: hidden; position: absolute; white-space: nowrap; height: auto; width: auto;">
 ```{r message=FALSE, warning=FALSE}
+colnames(sample_locations) <- c(" ", "  ", "  ")
 excelTable(sample_locations, defaultColWidth=200, editable=FALSE, autoColTypes=FALSE)
 ```
 </table></div>
@@ -202,242 +205,18 @@ The structure should now look like this:
 
 # Run the analysis setup script
 
-Now that the sample_location.txt file is in place we can run the analysis setup script. Be sure to run this script from the `analysis_mm_dd_yyyy` directory. This script won't run if the necessary arguments aren't provided. It will set-up the analysis based on the pipeline script to be run, in this case the RNASeq pipeline.
+First you'll have to copy the pipeline script in to the /scripts folder. You'll have to open this script and edit some parameters, like read length, project name, date, etc. Sections to be edited are clearly marked in the comments of the script. Now that the sample_location.txt file and the pipeline script are in place we can run the analysis setup script. Be sure to run this script from the `analysis_mm_dd_yyyy` directory. This script won't run if the necessary arguments aren't provided. It will set-up the analysis based on the pipeline script to be run, in this case the RNASeq pipeline.
 
-Here is the current analysis setup script at the time of writing, **`analysis_setup_v0.7.sh`**:
-```{bash}
-#!/bin/bash
+**RNAseq_pipeline_v0.65_HCT116_Hypox.sh**
 
-SCRIPT_TITLE=analysis_setup.sh
-SCRIPT_VERSION=0.7
-# DATE: 08-27-2018
-# AUTHOR: Matthew Galbraith / Santosh Khanal
-# SUMMARY: 
-# This script is designed to be run from Project/analysis_date/ and will generate:
-# /SAMPLE/Raw directories with symbolic links to fastq files
-# and
-# /scripts/submitAll.sh with one command per sample in the form:
-# nohup sh PATH/TO/PIPELINE_SCRIPT.sh SAMPLE_NAME ANALYSIS_DIR/ USER_NAME START_AT_STAGE END_AT_STAGE &> PIPELINE_SCRIPT.sh.SAMPLE_NAME.log &
-# This script uses read1 / read2 in the third column of sample_locations.txt to deal with paired-end vs. single-end data
-#
-# Version 0.5: Generates new form of submit scripts that run as sbatch rather than shell jobs (should improve robustness as SLURM rather than login node will be manging pipeline script).
-# MUST be used with corresponding version of pipeline script with stages called via sbatch with -W and --wrap options.
-# Version 0.6: Adds SUBMIT_LOG arg passed to pipeline script for getting JOB_ID and error checking
-# Version 0.7: added SBATCH --account for pipeline wrapper script; added SBATCH -p longrun and SBATCH --time=100:00:00 to prevent pipeline script from timing out (especially while waiting for resources)
-#
-# The submitAll.sh script should now be run from the appropriate Project/analysis_date/scripts directory as follows:
-# sbatch -o submitAll.sh.log submitAll.sh
+and here is an example RNA-Seq pipeline script, **`RNAseq_pipeline_v0.65_HCT116_Hypox.sh`**. You'll have to open this script and edit some parameters.
 
-
-##### ARGUMENTS PASSED FROM COMMAND LINE - DO NOT EDIT THIS SECTION #####
-
-# variables from command line:
-PIPELINE_SCRIPT=${1}            # Path to pipeline scripts directory e.g TTseq_pipeline_v0.5.sh
-ACCOUNT=${2}
-START_AT_STAGE=${3}
-END_AT_STAGE=${4}
-# Other variables:
-THIS_USER_ACCOUNT="$(whoami)"
-#if adding any new ARGS, remember to add below to output for submitAll.sh
-# TO DO: add ARG for espinosalab / HTP
-
-blue="\033[0;36m"
-green="\033[0;32m"
-red="\033[0;31m"
-NC="\033[0m"    # no color
-
-EXPECTED_ARGS=4
-# check if correct number of arguments are supplied from command line
-if [ $# -ne $EXPECTED_ARGS ]
-then
-        echo -ne "${red}ERROR - expecting "$EXPECTED_ARGS" ARGS but "$#" provided:${NC}
-        "$@""
-        echo "Usage: sh <PATH/TO/"$SCRIPT_TITLE"> <PATH/TO/PIPELINE_SCRIPT> <ACCOUNT: ESP/HTP> <START_AT_STAGE> <END_AT_STAGE>"
-        echo -e "EXAMPLE: sh /gpfs/jespinosa/shared/Matt/PipeLinesScripts/analysis_setup.sh /gpfs/jespinosa/shared/Matt/PipeLinesScripts/TTseq/TTseq_pipeline_v0.1.sh ESP 0 8"
-        exit 1
-fi
-
-# Check for sample_locations.txt
-if [ ! -e sample_locations.txt ]
-	then
-		echo -e "${red}ERROR - sample_locations.txt not found
-		"
-		exit 1
-fi
-
-# Check for pipeline script
-if [  ! -e "$PIPELINE_SCRIPT" ]
-	then
-		echo -e "${red}ERROR - Script does not exist:${NC} "$PIPELINE_SCRIPT"
-		"
-		exit 1
-fi
-
-# Set THIS_USER_ACCOUNT
-if [ "$ACCOUNT" = ESP ]
-	then
-		THIS_USER_ACCOUNT=espinosalab-"$(whoami)"
-elif [ "$ACCOUNT" = HTP ]
-	then
-		THIS_USER_ACCOUNT=htp-"$(whoami)"
-else
-	echo -e "${red}ERROR - Incorrect account given:${NC} use either ESP or HTP
-		"
-		exit 1
-fi
-
-## Set up SAMPLE directories and generate symbolic links to original raw FASTQ files
-# The symbolic links allow us to use informative names without renaming or duplicating original files
-# This currently requires adding a third field so sample_locations.txt with read1/read2 to deal with paired-end data (single read data will just be labelled as read1)
-# New in v0.2: Will not over-write existing Sample directories or symbolic links so that analysis_setup.sh can easily be re-run to create submitAll.sh scripts for different subsets of stages.
-
-# Create SAMPLE directory:
-for i in $(cat sample_locations.txt | awk '{print $1}' | uniq)
-do
-	SAMPLE_NAME=$(echo "$i")
-	if [ -d Sample_"$SAMPLE_NAME"/Raw ]
-		then
-			echo "Raw data directory for "$SAMPLE_NAME" already present - no action needed"
-		else
-			mkdir -p Sample_"$SAMPLE_NAME"/Raw
-			echo "Making directory: $(pwd)/Sample_"$SAMPLE_NAME"/Raw"
-	fi
-done
-
-# Create symbolic links for read 1:
-for i in $(cat sample_locations.txt | grep -w read1 | tr "\t" ":")
-do
-	SAMPLE_NAME=$(echo "$i" | cut -d ":" -f1)
-	FASTQ_FILE=$(echo "$i" | cut -d ":" -f2)
-	# Check for FASTQ_FILE
-	if [ -r "$FASTQ_FILE" ]
-	then
-		if [ -L Sample_"$SAMPLE_NAME"/Raw/"$SAMPLE_NAME"_R1.fastq.gz ]
-		then
-			echo "Symbolic link to "$SAMPLE_NAME" read 1 FASTQ file already present - no action needed"
-		else
-			ln -s "$FASTQ_FILE" Sample_"$SAMPLE_NAME"/Raw/"$SAMPLE_NAME"_R1.fastq.gz
-		fi
-	else
-		echo -e "${red}ERROR - read 1 FASTQ file does not exist or is not readable:${NC} "$FASTQ_FILE"
-		"
-		exit 1
-	fi
-done
-
-# Create symbolic links for read 2:
-for i in $(cat sample_locations.txt | grep -w read2 | tr "\t" ":")
-do
-	SAMPLE_NAME=$(echo "$i" | cut -d ":" -f1)
-	FASTQ_FILE=$(echo "$i" | cut -d ":" -f2)
-	# Check for FASTQ_FILE
-	if [ -r "$FASTQ_FILE" ]
-	then
-		if [ -L Sample_"$SAMPLE_NAME"/Raw/"$SAMPLE_NAME"_R2.fastq.gz ]		# this does not check if linking path is same
-		then
-			echo "Symbolic link to "$SAMPLE_NAME" read 2 FASTQ file already present - no action needed"
-		else
-			ln -s "$FASTQ_FILE" Sample_"$SAMPLE_NAME"/Raw/"$SAMPLE_NAME"_R2.fastq.gz
-		fi
-	else
-		echo -e "${red}ERROR - read 2 FASTQ file does not exist or is not readable:${NC} "$FASTQ_FILE"
-		"
-		exit 1
-	fi
-done
-
-# Check for scripts directory
-if [ ! -d scripts ]
-then
-	echo "Making directory: $(pwd)/scripts
-	"
-	mkdir -p $(pwd)/scripts
-fi
-
-echo "Writing commands to $(pwd)/scripts/submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh"
-
-# write parameters to submitAll.sh
-echo "#!/bin/sh
-
-#SBATCH -J SUBMIT_$(basename ${PIPELINE_SCRIPT%.sh})
-#SBATCH -p longrun
-#SBATCH --time=100:00:00
-#SBATCH -o ./submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh.log
-#SBATCH -D ./
-#SBATCH --account="$THIS_USER_ACCOUNT"
-#SBATCH --nodes=1
-#SBATCH --cpus-per-task=1
-#SBATCH --ntasks=1
-
-SCRIPT_TITLE="submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh_for_$(basename $PWD)"
-SCRIPT_VERSION="$SCRIPT_VERSION"
-# DATE: $(date)
-# AUTHOR: ${SCRIPT_TITLE%.sh}_v${SCRIPT_VERSION}.sh
-# SUMMARY:
-# This is an auto-generated script that contains commands to run the specified pipeline for each sample.
-# 
-# Sequencing details and analysis settings should be entered/changed in top section of <Pipeline_Type>.sh before running this script
-# 
-# This script should be run from the appropriate Project/analysis_date/scripts directory as follows:
-# sbatch submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh
-###### ^^ COPY AND PASTE COMMAND ABOVE TO RUN ^^ #######
-########################################################
-
-# Arguments set from command line:
-# Analysis Setup script: "$0"
-# PIPELINE_SCRIPT: "$1"
-# THIS_USER_ACCOUNT: "$2"
-# START_AT_STAGE: "$3"
-# END_AT_STAGE: "$4"
-
-# Arguments passed to "$PIPELINE_SCRIPT":
-# THIS_SAMPLE_NAME: $(cat sample_locations.txt | awk '{print $1}' | uniq | tr "\n" ";" )
-# THIS_ANALYSIS_DIR: $(pwd)/
-# THIS_USER_ACCOUNT: espinosalab-"$THIS_USER_ACCOUNT"
-# START_AT_STAGE: "$START_AT_STAGE"
-# END_AT_STAGE: "$END_AT_STAGE"
-# SUBMIT_LOG: "$(pwd)/scripts/$(basename "$PIPELINE_SCRIPT").SAMPLE.Stage"$START_AT_STAGE"-"$END_AT_STAGE".log" 
-
-" > scripts/submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh
-
-# write commands to submitAll.sh
-for i in $(cat sample_locations.txt | awk '{print $1}' | uniq) # the uniq step ensures a single command per SAMPLE for PE data (rather than 1 per fastq file as listed in sample_locations.txt) (v0.2: removed the sort to preserve sensible order)
-do 
-	SUBMIT_LOG="$(pwd)/scripts/$(basename "$PIPELINE_SCRIPT")."$i".Stage"$START_AT_STAGE"-"$END_AT_STAGE".log"
-	echo "(nohup sh "$PIPELINE_SCRIPT" "$i" $(pwd)/ "$THIS_USER_ACCOUNT" "$START_AT_STAGE" "$END_AT_STAGE" "$SUBMIT_LOG" &> "$SUBMIT_LOG") &"
-done >> scripts/submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh
-
-# need to execute commands above as subshells: (CMD) &
-# then use "wait" which waits for child processes to complete
-# then gather all std outs and errs to one log file:
-echo "
-wait
-
-# Intialize log file:
-echo  > $(pwd)/scripts/$(basename "$PIPELINE_SCRIPT").ALL.Stage"$START_AT_STAGE"-"$END_AT_STAGE".log
-
-# Collect individual std out and err files into one log file:" >> scripts/submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh
-
-for i in $(cat sample_locations.txt | awk '{print $1}' | uniq)
-do
-	SUBMIT_LOG="$(pwd)/scripts/$(basename "$PIPELINE_SCRIPT")."$i".Stage"$START_AT_STAGE"-"$END_AT_STAGE".log"
-	echo "cat "$SUBMIT_LOG" >> $(pwd)/scripts/$(basename "$PIPELINE_SCRIPT").ALL.Stage"$START_AT_STAGE"-"$END_AT_STAGE".log"
-	echo "rm "$SUBMIT_LOG""
-done >> scripts/submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh
-
-echo "Done."
-
-exit
-
-```
-
-and here is an example RNA-Seq pipeline script, **`RNAseq_pipeline_v0.65_CD4_CD8_NK.sh`**:
 ```{bash}
 #!/bin/bash
 
 PIPELINE_TITLE=RNAseq_pipeline
-PIPELINE_VERSION=0.65
-# DATE: 07-16-2019
+PIPELINE_VERSION=0.6
+# DATE: 05-06-2019
 # AUTHOR: Matthew Galbraith
 # SUMMARY: 
 # This script is designed to be run once for each sample (incl. both reads for PE) and is executed by submitAll.sh once per sample with the appropriate arguments.
@@ -445,7 +224,6 @@ PIPELINE_VERSION=0.65
 # Version 0.4+: Adds functions for catching SLURM stepd errors and checking SLURM exit codes
 # Version 0.5: Activating stages 13 and 14 for HOMER makeTagDirectory and HOMER makeUCSCfile
 # Version 0.6: Adding spike-in analysis
-# Version 0.65: Adding SEQ_TYPE to stage 11 to trigger name sorting for PE bam
 # 
 # Steps to run pipeline:
 # 1) In Project/ : create top-level working dirs: Project/raw_date and Project/analysis_date
@@ -484,15 +262,15 @@ SUBMIT_LOG=$6
         STRAND_TYPE=strand-specific-rev     # <strand-specific-fwd/strand-specific-rev/unstranded>  # use fwd for Nugen TTseq round 1 library; use rev for Illumina TruSeq stranded
         READ_LENGTH=150                     # <50/75/150>  # used to trim n+1 read if present
         PIPELINE_TYPE=RNAseq
-        SPIKE_IN=none                       # <none/both/dm/ercc> external RNA spike-in details; used to select correct index(s) and gtf(s) for alignment and counting - check that correct paths are ebtered for stages 4 and 11 below
-        PIPELINE_SCRIPTS_DIR=/gpfs/jespinosa/shared/PipeLinesScripts/RNAseq/stageScripts                    # THIS COULD BE IMPLEMENTED AS ARG
+        SPIKE_IN=both                       # <none/both/dm/ercc> external RNA spike-in details; used to select correct index(s) and gtf(s) for alignment and counting - check that correct paths are ebtered for stages 4 and 11 below
+        PIPELINE_SCRIPTS_DIR=/gpfs/jespinosa/shared/Matt/PipeLinesScripts/RNAseq/stageScripts                    # THIS COULD BE IMPLEMENTED AS ARG
         QC_DIR_NAME="$THIS_ANALYSIS_DIR"/QC
         ALIGNMENT_DIRNAME=="$THIS_ANALYSIS_DIR"/Sample_"$THIS_SAMPLE_NAME"/Alignments   # NEED TO IMPLEMENT IN STAGE 4
         COUNTS_DIRNAME="$THIS_ANALYSIS_DIR"/Sample_"$THIS_SAMPLE_NAME"/Counts
         TRACKS_DIRNAME="$THIS_ANALYSIS_DIR"/Tracks
         # FASTQR1_FILE=see switch and check below
         # FASTQR2_FILE=see switch and check below
-        COMMENTS="This version is current default.
+        COMMENTS="This version is for HCT116 Hypoxia RNA-seq data with Drosophila and ERCC spike-ins.
 "     # Add comments explaining this version of the analysis
 
 ## STAGE-SPECIFIC VARIABLES TO EDIT HERE ##
@@ -549,9 +327,9 @@ SUBMIT_LOG=$6
         # common options
         PLATFORM=ILLUMINA_NovaSeq6000
         DATE="$(date "+%m-%d-%Y")"
-        PI=HTP_Galbraith
+        PI=MDG
         LIBRARY="$SEQ_TYPE"_"$STRAND_TYPE"
-        SEQ_CORE=CUAnschutz
+        SEQ_CORE=Novogene
         SEQ_ID=NA
         EXPERIMENT=stranded_RNAseq
         # uncommon options are either defaults or set in 5_
@@ -574,7 +352,7 @@ SUBMIT_LOG=$6
         REFSEQ_BED=$SHARED/references/Homo_sapiens/UCSC/hg19/tool_resources/rseqc/hg19_RefSeq.bed
         HOUSEKEEPING_BED=$SHARED/references/Homo_sapiens/UCSC/hg19/tool_resources/rseqc/hg19.HouseKeepingGenes.bed
 
-# 11 HTSeq COUNT
+# 12 HTSeq COUNT
         GTF="$SHARED"/references/Homo_sapiens/UCSC/hg19/Annotation/Genes/genes.gtf                      # from igenomes
         DM_GTF="$SHARED"/Matt/Refs/dm6/Drosophila_melanogaster/UCSC/dm6/Annotation/Genes/genes.gtf      # from igenomes
         ERCC_GTF="$SHARED"/Matt/Refs/ERCC/ERCC92/ERCC92.gtf                                             # from https://assets.thermofisher.com/TFS-Assets/LSG/manuals/ERCC92.zip
@@ -587,7 +365,7 @@ SUBMIT_LOG=$6
         ORDER=pos       # For paired-end data: <name> or <pos>; Default is name
         # BUFFER=       # --max-reads-in-buffer=<number>; when paired sorted by position; default is 30000000       # NOT IMPLEMENTED YET
 
-# 12 HOMER MAKE TAG DIR
+# 13 HOMER MAKE TAG DIR
         # Stages 11 and 12 should normally be run together to ensure same settings ie -fragLength, -tbp
         HOMER_DIRNAME="$THIS_ANALYSIS_DIR"/HOMER
         REF=hg19            # used for -genome <genome version> (required for -checkGC)
@@ -605,7 +383,7 @@ SUBMIT_LOG=$6
         # If you use paired-end reads for ChIP-Seq or RNA-Seq, HOMER will treat each half of the read separately (and count each as 0.5 reads), which works well for a number of applications.
         # If you are using stranded paired-end reads, make sure to specify "-sspe" so that HOMER will correctly interpret the intended strand for the 2nd read in the mate-pair.
 
-# 13 HOMER MAKE UCSC FILE
+# 14 HOMER MAKE UCSC FILE
         # Stages 11 and 12 should normally be run together to ensure same settings ie -fragLength, -tbp
         FRAG_LENGTH_s12="$FRAG_LENGTH_s11"            # used for -fragLength <# | auto | given> option; default: auto; "none" to use default or should set to "$FRAG_LENGTH_s11" to match stage 11; may have to use given for PE RNAseq to prevent extension past splice sites (will give crisp borders at exons but not plot 3' parts of reads after junctions)
         REF=hg19
@@ -1190,22 +968,22 @@ Read 2 fastq file: "$FASTQR2_FILE"
                 "
 
                 # switch to select correct index and GTF
-                if [ $SPIKE_IN = none ]
+                if [ $SPIKE-IN = none ]
                 then
                     INDEX="$BOWTIE_INDEX"
                     GTF="$TOPHAT_GTF"
                     TX_INDEX="$TRANSCRIPTOME_INDEX"
-                elif [ $SPIKE_IN = both ]
+                elif [ $SPIKE-IN = both ]
                 then
                     INDEX="$BOWTIE_INDEX_BOTH"
                     GTF="$TOPHAT_GTF_BOTH"
                     TX_INDEX="$TRANSCRIPTOME_INDEX_BOTH"
-                elif [ $SPIKE_IN = dm ]
+                elif [ $SPIKE-IN = dm ]
                 then
                     INDEX="$BOWTIE_INDEX_DM6"
                     GTF="$TOPHAT_GTF_DM6"
                     TX_INDEX="$TRANSCRIPTOME_INDEX_DM6"
-                elif [ $SPIKE_IN = ercc ]
+                elif [ $SPIKE-IN = ercc ]
                 then
                     INDEX="$BOWTIE_INDEX_ERCC"
                     GTF="$TOPHAT_GTF"
@@ -1676,7 +1454,7 @@ Read 2 fastq file: "$FASTQR2_FILE"
                 "
 
                 # sh 11_HTSEQ_COUNT.sh
-                # Usage: 11_HTSEQ_COUNT.sh <ANALYSIS_DIR> <SAMPLE_DIR> <SAMPLE_NAME> <STRAND_TYPE> <SPIKE_IN> <SORT_ORDER> <GTF> <DM_GTF> <ERCC_GTF> <FEATURETYPE> <IDATTR> <MINAQUAL> <MODE> <COUNTS_DIRNAME> <SEQ_TYPE>
+                # Usage: 11_HTSEQ_COUNT.sh <ANALYSIS_DIR> <SAMPLE_DIR> <SAMPLE_NAME> <STRAND_TYPE> <SPIKE_IN> <SORT_ORDER> <GTF> <DM_GTF> <ERCC_GTF> <FEATURETYPE> <IDATTR> <MINAQUAL> <MODE> <COUNTS_DIRNAME>
 
                 sbatch -W \
                         --account="$THIS_USER_ACCOUNT" \
@@ -1690,7 +1468,7 @@ Read 2 fastq file: "$FASTQR2_FILE"
                         --cpus-per-task=16 \
                         --ntasks=1 \
                         --wrap="\
-                                sh "$PIPELINE_SCRIPTS_DIR"/11_HTSEQ_COUNT.sh "$THIS_ANALYSIS_DIR" "$THIS_ANALYSIS_DIR"/Sample_"$THIS_SAMPLE_NAME"/ "$THIS_SAMPLE_NAME" "$STRAND_TYPE" "$SPIKE_IN" "$ORDER" "$GTF" "$DM_GTF" "$ERCC_GTF" "$FEATURETYPE" "$IDATTR" "$HT_MINAQUAL" "$MODE" "$COUNTS_DIRNAME" "$SEQ_TYPE"\
+                                sh "$PIPELINE_SCRIPTS_DIR"/11_HTSEQ_COUNT.sh "$THIS_ANALYSIS_DIR" "$THIS_ANALYSIS_DIR"/Sample_"$THIS_SAMPLE_NAME"/ "$THIS_SAMPLE_NAME" "$STRAND_TYPE" "$SPIKE_IN" "$ORDER" "$GTF" "$DM_GTF" "$ERCC_GTF" "$FEATURETYPE" "$IDATTR" "$HT_MINAQUAL" "$MODE" "$COUNTS_DIRNAME"\
                                 "
 
                 # Catch output status
@@ -1930,9 +1708,246 @@ then
 fi
 
 exit
+```
 
+**analysis_setup.sh**
+
+Here is the current analysis setup script at the time of writing, **`analysis_setup_v0.7.sh`**:
+
+```{bash}
+#!/bin/bash
+
+SCRIPT_TITLE=analysis_setup.sh
+SCRIPT_VERSION=0.7
+# DATE: 08-27-2018
+# AUTHOR: Matthew Galbraith / Santosh Khanal
+# SUMMARY: 
+# This script is designed to be run from Project/analysis_date/ and will generate:
+# /SAMPLE/Raw directories with symbolic links to fastq files
+# and
+# /scripts/submitAll.sh with one command per sample in the form:
+# nohup sh PATH/TO/PIPELINE_SCRIPT.sh SAMPLE_NAME ANALYSIS_DIR/ USER_NAME START_AT_STAGE END_AT_STAGE &> PIPELINE_SCRIPT.sh.SAMPLE_NAME.log &
+# This script uses read1 / read2 in the third column of sample_locations.txt to deal with paired-end vs. single-end data
+#
+# Version 0.5: Generates new form of submit scripts that run as sbatch rather than shell jobs (should improve robustness as SLURM rather than login node will be manging pipeline script).
+# MUST be used with corresponding version of pipeline script with stages called via sbatch with -W and --wrap options.
+# Version 0.6: Adds SUBMIT_LOG arg passed to pipeline script for getting JOB_ID and error checking
+# Version 0.7: added SBATCH --account for pipeline wrapper script; added SBATCH -p longrun and SBATCH --time=100:00:00 to prevent pipeline script from timing out (especially while waiting for resources)
+#
+# The submitAll.sh script should now be run from the appropriate Project/analysis_date/scripts directory as follows:
+# sbatch -o submitAll.sh.log submitAll.sh
+
+
+##### ARGUMENTS PASSED FROM COMMAND LINE - DO NOT EDIT THIS SECTION #####
+
+# variables from command line:
+PIPELINE_SCRIPT=${1}            # Path to pipeline scripts directory e.g TTseq_pipeline_v0.5.sh
+ACCOUNT=${2}
+START_AT_STAGE=${3}
+END_AT_STAGE=${4}
+# Other variables:
+THIS_USER_ACCOUNT="$(whoami)"
+#if adding any new ARGS, remember to add below to output for submitAll.sh
+# TO DO: add ARG for espinosalab / HTP
+
+blue="\033[0;36m"
+green="\033[0;32m"
+red="\033[0;31m"
+NC="\033[0m"    # no color
+
+EXPECTED_ARGS=4
+# check if correct number of arguments are supplied from command line
+if [ $# -ne $EXPECTED_ARGS ]
+then
+        echo -ne "${red}ERROR - expecting "$EXPECTED_ARGS" ARGS but "$#" provided:${NC}
+        "$@""
+        echo "Usage: sh <PATH/TO/"$SCRIPT_TITLE"> <PATH/TO/PIPELINE_SCRIPT> <ACCOUNT: ESP/HTP> <START_AT_STAGE> <END_AT_STAGE>"
+        echo -e "EXAMPLE: sh /gpfs/jespinosa/shared/Matt/PipeLinesScripts/analysis_setup.sh /gpfs/jespinosa/shared/Matt/PipeLinesScripts/TTseq/TTseq_pipeline_v0.1.sh ESP 0 8"
+        exit 1
+fi
+
+# Check for sample_locations.txt
+if [ ! -e sample_locations.txt ]
+	then
+		echo -e "${red}ERROR - sample_locations.txt not found
+		"
+		exit 1
+fi
+
+# Check for pipeline script
+if [  ! -e "$PIPELINE_SCRIPT" ]
+	then
+		echo -e "${red}ERROR - Script does not exist:${NC} "$PIPELINE_SCRIPT"
+		"
+		exit 1
+fi
+
+# Set THIS_USER_ACCOUNT
+if [ "$ACCOUNT" = ESP ]
+	then
+		THIS_USER_ACCOUNT=espinosalab-"$(whoami)"
+elif [ "$ACCOUNT" = HTP ]
+	then
+		THIS_USER_ACCOUNT=htp-"$(whoami)"
+else
+	echo -e "${red}ERROR - Incorrect account given:${NC} use either ESP or HTP
+		"
+		exit 1
+fi
+
+## Set up SAMPLE directories and generate symbolic links to original raw FASTQ files
+# The symbolic links allow us to use informative names without renaming or duplicating original files
+# This currently requires adding a third field so sample_locations.txt with read1/read2 to deal with paired-end data (single read data will just be labelled as read1)
+# New in v0.2: Will not over-write existing Sample directories or symbolic links so that analysis_setup.sh can easily be re-run to create submitAll.sh scripts for different subsets of stages.
+
+# Create SAMPLE directory:
+for i in $(cat sample_locations.txt | awk '{print $1}' | uniq)
+do
+	SAMPLE_NAME=$(echo "$i")
+	if [ -d Sample_"$SAMPLE_NAME"/Raw ]
+		then
+			echo "Raw data directory for "$SAMPLE_NAME" already present - no action needed"
+		else
+			mkdir -p Sample_"$SAMPLE_NAME"/Raw
+			echo "Making directory: $(pwd)/Sample_"$SAMPLE_NAME"/Raw"
+	fi
+done
+
+# Create symbolic links for read 1:
+for i in $(cat sample_locations.txt | grep -w read1 | tr "\t" ":")
+do
+	SAMPLE_NAME=$(echo "$i" | cut -d ":" -f1)
+	FASTQ_FILE=$(echo "$i" | cut -d ":" -f2)
+	# Check for FASTQ_FILE
+	if [ -r "$FASTQ_FILE" ]
+	then
+		if [ -L Sample_"$SAMPLE_NAME"/Raw/"$SAMPLE_NAME"_R1.fastq.gz ]
+		then
+			echo "Symbolic link to "$SAMPLE_NAME" read 1 FASTQ file already present - no action needed"
+		else
+			ln -s "$FASTQ_FILE" Sample_"$SAMPLE_NAME"/Raw/"$SAMPLE_NAME"_R1.fastq.gz
+		fi
+	else
+		echo -e "${red}ERROR - read 1 FASTQ file does not exist or is not readable:${NC} "$FASTQ_FILE"
+		"
+		exit 1
+	fi
+done
+
+# Create symbolic links for read 2:
+for i in $(cat sample_locations.txt | grep -w read2 | tr "\t" ":")
+do
+	SAMPLE_NAME=$(echo "$i" | cut -d ":" -f1)
+	FASTQ_FILE=$(echo "$i" | cut -d ":" -f2)
+	# Check for FASTQ_FILE
+	if [ -r "$FASTQ_FILE" ]
+	then
+		if [ -L Sample_"$SAMPLE_NAME"/Raw/"$SAMPLE_NAME"_R2.fastq.gz ]		# this does not check if linking path is same
+		then
+			echo "Symbolic link to "$SAMPLE_NAME" read 2 FASTQ file already present - no action needed"
+		else
+			ln -s "$FASTQ_FILE" Sample_"$SAMPLE_NAME"/Raw/"$SAMPLE_NAME"_R2.fastq.gz
+		fi
+	else
+		echo -e "${red}ERROR - read 2 FASTQ file does not exist or is not readable:${NC} "$FASTQ_FILE"
+		"
+		exit 1
+	fi
+done
+
+# Check for scripts directory
+if [ ! -d scripts ]
+then
+	echo "Making directory: $(pwd)/scripts
+	"
+	mkdir -p $(pwd)/scripts
+fi
+
+echo "Writing commands to $(pwd)/scripts/submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh"
+
+# write parameters to submitAll.sh
+echo "#!/bin/sh
+
+#SBATCH -J SUBMIT_$(basename ${PIPELINE_SCRIPT%.sh})
+#SBATCH -p longrun
+#SBATCH --time=100:00:00
+#SBATCH -o ./submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh.log
+#SBATCH -D ./
+#SBATCH --account="$THIS_USER_ACCOUNT"
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=1
+#SBATCH --ntasks=1
+
+SCRIPT_TITLE="submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh_for_$(basename $PWD)"
+SCRIPT_VERSION="$SCRIPT_VERSION"
+# DATE: $(date)
+# AUTHOR: ${SCRIPT_TITLE%.sh}_v${SCRIPT_VERSION}.sh
+# SUMMARY:
+# This is an auto-generated script that contains commands to run the specified pipeline for each sample.
+# 
+# Sequencing details and analysis settings should be entered/changed in top section of <Pipeline_Type>.sh before running this script
+# 
+# This script should be run from the appropriate Project/analysis_date/scripts directory as follows:
+# sbatch submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh
+###### ^^ COPY AND PASTE COMMAND ABOVE TO RUN ^^ #######
+########################################################
+
+# Arguments set from command line:
+# Analysis Setup script: "$0"
+# PIPELINE_SCRIPT: "$1"
+# THIS_USER_ACCOUNT: "$2"
+# START_AT_STAGE: "$3"
+# END_AT_STAGE: "$4"
+
+# Arguments passed to "$PIPELINE_SCRIPT":
+# THIS_SAMPLE_NAME: $(cat sample_locations.txt | awk '{print $1}' | uniq | tr "\n" ";" )
+# THIS_ANALYSIS_DIR: $(pwd)/
+# THIS_USER_ACCOUNT: espinosalab-"$THIS_USER_ACCOUNT"
+# START_AT_STAGE: "$START_AT_STAGE"
+# END_AT_STAGE: "$END_AT_STAGE"
+# SUBMIT_LOG: "$(pwd)/scripts/$(basename "$PIPELINE_SCRIPT").SAMPLE.Stage"$START_AT_STAGE"-"$END_AT_STAGE".log" 
+
+" > scripts/submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh
+
+# write commands to submitAll.sh
+for i in $(cat sample_locations.txt | awk '{print $1}' | uniq) # the uniq step ensures a single command per SAMPLE for PE data (rather than 1 per fastq file as listed in sample_locations.txt) (v0.2: removed the sort to preserve sensible order)
+do 
+	SUBMIT_LOG="$(pwd)/scripts/$(basename "$PIPELINE_SCRIPT")."$i".Stage"$START_AT_STAGE"-"$END_AT_STAGE".log"
+	echo "(nohup sh "$PIPELINE_SCRIPT" "$i" $(pwd)/ "$THIS_USER_ACCOUNT" "$START_AT_STAGE" "$END_AT_STAGE" "$SUBMIT_LOG" &> "$SUBMIT_LOG") &"
+done >> scripts/submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh
+
+# need to execute commands above as subshells: (CMD) &
+# then use "wait" which waits for child processes to complete
+# then gather all std outs and errs to one log file:
+echo "
+wait
+
+# Intialize log file:
+echo  > $(pwd)/scripts/$(basename "$PIPELINE_SCRIPT").ALL.Stage"$START_AT_STAGE"-"$END_AT_STAGE".log
+
+# Collect individual std out and err files into one log file:" >> scripts/submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh
+
+for i in $(cat sample_locations.txt | awk '{print $1}' | uniq)
+do
+	SUBMIT_LOG="$(pwd)/scripts/$(basename "$PIPELINE_SCRIPT")."$i".Stage"$START_AT_STAGE"-"$END_AT_STAGE".log"
+	echo "cat "$SUBMIT_LOG" >> $(pwd)/scripts/$(basename "$PIPELINE_SCRIPT").ALL.Stage"$START_AT_STAGE"-"$END_AT_STAGE".log"
+	echo "rm "$SUBMIT_LOG""
+done >> scripts/submitAll_"$START_AT_STAGE"-"$END_AT_STAGE".sh
+
+echo "Done."
+
+exit
 
 ```
+
+In sum, it will perform the following steps:
+
++ set up SAMPLE directories and generate symbolic links to original raw FASTQ files
++ write the submit_all.sh script
+  + contains job scheduler commands to run the provided pipeline script
+  + sets up log collection
+
+
 
 Here is an example command which will run the analysis setup with the RNA-Seq pipeline script using the Espinosa lab account with stages 0 through 11.
 
@@ -2025,6 +2040,12 @@ rm /gpfs/jespinosa/shared/Projects2/RNAseq/HCT116_Hypoxia_spikein/analysis_05_06
 
 ```
 
+In sum, it will perform the following steps:
+
++ contains job scheduler commands to run the provided pipeline script
+  + the jobs run asynchronously, so each fastq file pair is processed with it's own resources
++ collects individual log files in to one file
+
 At the top you'll see some parameters following `#SBATCH`. These are passed to SLURM and configure how the job will be run. To submit the this script and get the job running, do
 
 ```{class.source=NULL}
@@ -2046,6 +2067,30 @@ $ watching -u username
 # Check the logs
 
 Check the run logs to ensure everything ran to completion without error. There will be a log file in the scripts folder which will give information as to which stage the script failed on. If there are issues, determine at which stage the error occurred and check `std_err_out` folder within the per-sample output folders. Here you'll find more detailed tool-specific output.
+
+As an example for things you might look for, if you search the log for the pattern `ending` you can see how many samples reached the end of processing. We had 8 samples, so things look good here.
+
+```{class.source=NULL}
+$ grep ending RNAseq_pipeline_v0.6.sh.ALL.Stage5-10.log
+RNAseq_pipeline run ending at stage 10
+RNAseq_pipeline run ending at stage 10
+RNAseq_pipeline run ending at stage 10
+RNAseq_pipeline run ending at stage 10
+RNAseq_pipeline run ending at stage 10
+RNAseq_pipeline run ending at stage 10
+RNAseq_pipeline run ending at stage 10
+RNAseq_pipeline run ending at stage 10
+$ grep ending RNAseq_pipeline_v0.6.sh.ALL.Stage5-10.log | wc -l
+8
+```
+
+Finding failures will be less clear cut, but if you encounter fewer-than-expected `run ending` messages, a good place to start is searching for the pattern `failed`.
+
+```{class.source=NULL}
+$ grep failed  RNAseq_pipeline_v0.65_CD4_CD8_NK.sh.ALL.Stage5-11.log
+Stage 11-HTSEQ-COUNT failed!!
+Stage 11-HTSEQ-COUNT failed!!
+```
 
 # Final directory structure
 
