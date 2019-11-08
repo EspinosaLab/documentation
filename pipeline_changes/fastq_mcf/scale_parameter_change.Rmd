@@ -1,20 +1,36 @@
 ---
-title: "Trimming parameter changes | fastq-mcf -s flag"
-subtitle: "Linda Crnic Institute for Down Syndrome"
-author: "Kohl Kinning"
-date: "`r format(Sys.time(), '%d %B %Y')`"
+title: "`r params$title`"
 output:
   html_notebook: 
-    code_folding: none
+    code_folding: hide
+    number_sections: yes
     theme: cosmo
     toc: yes
     toc_float:
       collapsed: yes
 editor_options: 
   chunk_output_type: inline
+params:
+  version: 0.2
+  title: Fastq-mcf -s parameter change
+  project: Differences in pre-processing results if -s (scale) parameter of fastq-mcf is altered
+  date: !r format(Sys.time(), '%d %B %Y')
+  author:
+    - Kohl Kinning
+  email:
+    - kohl.kinning@cuanschutz.edu
+  affiliation: Linda Crnic Institute for Down Syndrome, University of Colorado Anschutz Medical Campus
 ---
 
-The `-s` (scale) parameter was set to `0` in the pipeline. This parameter is interpreted as log2(s), so the setting of `0` results in adapter trimming after a single base match.  We noticed over-aggressive trimming of the ends of reads due to such a low threshold for matching. In this report, we initially look at the differences of several `-s` settings and then continue to look at the differences between a stting of `0` and `1.6`.
+***
+<font style="font-size:18pt"> Project: `r params$project` </font><br>
+Date:  `r params$date`  
+Report version: `r params$version`   
+Author(s): `r params$author`  
+`r params$email`  
+`r params$affiliation`
+
+The `-s` (scale) parameter was set to `0` in the pipeline. This parameter is interpreted as log2(s), so the setting of `0` results in adapter trimming after a single base match.  We noticed over-aggressive trimming of the ends of reads due to such a low threshold for matching. In this report, we initially look at the differences of several `-s` settings and then continue to look at the differences between a setting of `0` and `1.6`.
 
 ### Libraries
 
@@ -23,11 +39,12 @@ library(ggplot2)
 library(ggpubr)
 library(dplyr)
 library(plotly)
+library(tibble)
 ```
 
 ### Difference in total counts 
 
-A match of 1 and 2 bases looks similar, while higher settings result in a sharp dropoff.
+A match of 1 and 2 bases looks similar, while higher settings result in a sharp drop off.
 ```{r}
 trim_counts <- read.table("~/Projects/CD4_CD8_NK_trimming_investigations/trimming_results.csv", header=TRUE, sep=",")
 
@@ -90,7 +107,6 @@ colSums(bound_counts[1:2]==0)
 Look at the average per-gene counts change, using the absolute differences
 ```{r}
 mean(abs(bound_counts$diff))
-mean(abs(bound_counts$ratio_change))
 ```
 
 
@@ -124,7 +140,7 @@ bound_counts[lost_genes,1:3]
 ```
 
 
-### Highest diffrences
+### Highest differences
 
 Look at the genes which show the largest differences in counts
 ```{r}
