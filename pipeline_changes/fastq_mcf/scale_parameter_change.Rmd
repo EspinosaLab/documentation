@@ -2,8 +2,6 @@
 title: "`r params$title`"
 output:
   html_notebook: 
-    code_folding: hide
-    number_sections: yes
     theme: cosmo
     toc: yes
     toc_float:
@@ -32,17 +30,16 @@ Author(s): `r params$author`
 
 The `-s` (scale) parameter was set to `0` in the pipeline. This parameter is interpreted as log2(s), so the setting of `0` results in adapter trimming after a single base match.  We noticed over-aggressive trimming of the ends of reads due to such a low threshold for matching. In this report, we initially look at the differences of several `-s` settings and then continue to look at the differences between a setting of `0` and `1.6`.
 
-### Libraries
+# Libraries
 
 ```{r}
 library(ggplot2)
 library(ggpubr)
 library(dplyr)
 library(plotly)
-library(tibble)
 ```
 
-### Difference in total counts 
+# Difference in total counts 
 
 A match of 1 and 2 bases looks similar, while higher settings result in a sharp drop off.
 ```{r}
@@ -55,7 +52,7 @@ ggplot(trim_counts, aes(x=as.character(scale), y=clipped_end_reads)) +
   theme_pubr()
 ```
 
-### Read the counts data in
+# Read the counts data in
 
 Look at the HTSeq resulting gene count data for the setting of `0` and `1.6`.
 ```{r}
@@ -71,7 +68,7 @@ bound_counts$ratio_change <- bound_counts$diff/bound_counts$lower_thresh
 
 
 
-### Scatter plot
+# Scatter plot
 
 Observe no outliers when comparing the counts between the settings. Any changes are minor and in a consistent direction.
 ```{r}
@@ -87,7 +84,7 @@ ggplot(bound_counts, aes(x=log2(lower_thresh), y=log2(higher_thresh), label=rown
 
 
 
-### Total difference in counts
+# Total difference in counts
 
 Look at the total difference in HTSeq counts due to the `-s` parameter change
 ```{r}
@@ -95,14 +92,14 @@ sum(bound_counts$lower_thresh)-sum(bound_counts$higher_thresh)
 ```
 
 
-### Zero count genes
+# Zero count genes
 
 Number of genes lost completely
 ```{r}
 colSums(bound_counts[1:2]==0)
 ```
 
-### Average change
+# Average change
 
 Look at the average per-gene counts change, using the absolute differences
 ```{r}
@@ -111,7 +108,7 @@ mean(abs(bound_counts$diff))
 
 
 
-### Gene gain
+# Gene gain
 
 Which genes do we gain with the higher thresh?
 ```{r}
@@ -126,7 +123,7 @@ bound_counts[gained_genes,1:3]
 
 
 
-### Gene loss
+# Gene loss
 
 Which genes do we lose with the higher thresh?
 ```{r}
@@ -140,10 +137,10 @@ bound_counts[lost_genes,1:3]
 ```
 
 
-### Highest differences
+# Highest differences
 
 Look at the genes which show the largest differences in counts
 ```{r}
-bound_counts %>% rownames_to_column() %>% top_n(50, diff) %>% arrange(-diff)
+bound_counts %>% tibble::rownames_to_column() %>% top_n(50, diff) %>% arrange(-diff)
 ```
 
