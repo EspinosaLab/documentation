@@ -52,6 +52,8 @@ ECDSA key fingerprint is fd:fd:d4:f9:77:fe:73:84:e1:55:00:ad:d6:6d:22:fe.
 Are you sure you want to continue connecting (yes/no)? yes
 ```
 
+## Create an alias
+
 If you setup ssh-keygen without a passphrase, you should now be able to ssh into the jumphost server without having to type in a password. To access Rosalind you'll still have to execute `ssh hpc`. This can be automated! There are two usual routes of configuring ssh connections. The more elegant way of saving an configurations in a file at ~/.ssh/config. The TICR administration doesn't allow our connection to be configured this way, so we'll use a slightly less refined technique. Enter `alias`. Using an alias we can piggyback another ssh connection on our first one and send some commands to keep the server from timing out so quickly.
 
 ```

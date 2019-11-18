@@ -49,6 +49,8 @@ hosts on the computer you are connecting to: type `yes` and hit
     ECDSA key fingerprint is fd:fd:d4:f9:77:fe:73:84:e1:55:00:ad:d6:6d:22:fe.
     Are you sure you want to continue connecting (yes/no)? yes
 
+## Create an alias
+
 If you setup ssh-keygen without a passphrase, you should now be able to
 ssh into the jumphost server without having to type in a password. To
 access Rosalind you’ll still have to execute `ssh hpc`. This can be
