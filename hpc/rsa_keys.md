@@ -35,7 +35,7 @@ To add your public key to ~/.ssh/authorized\_keys on the jumphost,
 execute the from your local machine following (at your own
     discretion):
 
-    $ cat ~/.ssh/id_rsa.pub | ssh USERNAME@cubipmaccess.ucdenver.pvt' "cat >> ~/.ssh/authorized_keys"
+    $ cat ~/.ssh/id_rsa.pub | ssh USERNAME@cubipmaccess.ucdenver.pvt "cat >> ~/.ssh/authorized_keys"
 
 This step will prompt you for a password because the paired
 authentication has not been setup yet.
